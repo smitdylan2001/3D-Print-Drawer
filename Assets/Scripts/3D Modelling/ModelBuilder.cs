@@ -1,4 +1,6 @@
+using NUnit.Framework.Internal.Filters;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -51,16 +53,33 @@ public class ModelBuilder : MonoBehaviour
         generatedMesh = new Mesh();
         generatedMesh.name = "GeneratedCustomMesh";
         TargetMeshFilter.mesh = generatedMesh;
+        generatedMesh.MarkDynamic();
+
     }
+
+#if UNITY_EDITOR
+    private async void Start()
+    {
+
+        await Task.Delay(1000);
+        OnCreatePerformed();
+        await Task.Delay(1000);
+        OnCreatePerformed();
+        await Task.Delay(1000);
+        OnCreatePerformed();
+
+
+    }
+#endif
 
     private void Update()
     {
         OVRPlugin.GetActionStateBoolean("front", out bool stylus_front_button);
         OVRPlugin.GetActionStateBoolean("back", out bool stylus_back_button);
 
-        if(stylus_front_button && !HasPressedMain)
+        if(stylus_front_button)
         {
-            OnCreatePerformed();
+            if(!HasPressedMain) OnCreatePerformed();
             HasPressedMain = true;
             Debug.Log("Action");
         }
@@ -69,9 +88,9 @@ public class ModelBuilder : MonoBehaviour
             if(stylus_front_button) Debug.Log("Supressing action");
             HasPressedMain = false;
         }
-        if (stylus_back_button && !HasPressedSecond)
+        if (stylus_back_button)
         {
-            OnUndoPerformed();
+            if(!HasPressedSecond) OnUndoPerformed();
             HasPressedSecond = true;
         }
         else
@@ -212,12 +231,17 @@ public class ModelBuilder : MonoBehaviour
     {
         generatedMesh.Clear(); // Clear old data
 
-        generatedMesh.vertices = allVertices.ToArray();
-        generatedMesh.triangles = allTriangles.ToArray();
+        generatedMesh.SetVertices(allVertices);
+        generatedMesh.SetIndices(allTriangles, MeshTopology.Triangles, 0);
 
+        
         // Recalculate normals for correct lighting and bounds for culling
         generatedMesh.RecalculateNormals();
         generatedMesh.RecalculateBounds();
+
+        generatedMesh.MarkModified();
+
+        TargetMeshFilter.sharedMesh = generatedMesh;
     }
 
     /// <summary>
