@@ -1,8 +1,10 @@
-using NUnit.Framework.Internal.Filters;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.InputSystem;
+
+// Removed unnecessary using statements for clarity
+// using NUnit.Framework.Internal.Filters;
+// using System.Threading.Tasks;
+// using UnityEngine.InputSystem;
 
 public class ModelBuilder : MonoBehaviour
 {
@@ -17,6 +19,11 @@ public class ModelBuilder : MonoBehaviour
     [SerializeField]
     private MeshFilter TargetMeshFilter; // The MeshFilter that will hold our final mesh
 
+    // NEW: A public variable to control how close you need to be to an existing vertex to snap to it.
+    // You can adjust this value in the Unity Inspector.
+    [SerializeField]
+    private float snapDistance = 0.05f;
+
     // Private variables to manage the mesh creation state
     private Mesh generatedMesh;
     private LineRenderer lineRenderer;
@@ -27,6 +34,9 @@ public class ModelBuilder : MonoBehaviour
 
     // Temporary lists for building one triangle at a time
     private readonly List<Vector3> currentTriangleVertices = new List<Vector3>();
+    // NEW: A temporary list to store the INDICES of the vertices for the current triangle.
+    // This is crucial for reusing existing vertices.
+    private readonly List<int> currentTriangleIndices = new List<int>();
     private readonly List<GameObject> activeDots = new List<GameObject>();
 
     private bool HasPressedMain, HasPressedSecond;
@@ -54,43 +64,27 @@ public class ModelBuilder : MonoBehaviour
         generatedMesh.name = "GeneratedCustomMesh";
         TargetMeshFilter.mesh = generatedMesh;
         generatedMesh.MarkDynamic();
-
     }
-
-#if UNITY_EDITOR
-    private async void Start()
-    {
-
-        await Task.Delay(1000);
-        OnCreatePerformed();
-        await Task.Delay(1000);
-        OnCreatePerformed();
-        await Task.Delay(1000);
-        OnCreatePerformed();
-
-
-    }
-#endif
 
     private void Update()
     {
+        // Your input handling logic remains the same
         OVRPlugin.GetActionStateBoolean("front", out bool stylus_front_button);
         OVRPlugin.GetActionStateBoolean("back", out bool stylus_back_button);
 
-        if(stylus_front_button)
+        if (stylus_front_button)
         {
-            if(!HasPressedMain) OnCreatePerformed();
+            if (!HasPressedMain) OnCreatePerformed();
             HasPressedMain = true;
-            Debug.Log("Action");
         }
         else
         {
-            if(stylus_front_button) Debug.Log("Supressing action");
             HasPressedMain = false;
         }
+
         if (stylus_back_button)
         {
-            if(!HasPressedSecond) OnUndoPerformed();
+            if (!HasPressedSecond) OnUndoPerformed();
             HasPressedSecond = true;
         }
         else
@@ -100,41 +94,82 @@ public class ModelBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// This method is called every time the trigger button is fully pressed.
+    /// MODIFIED: This method now checks for nearby vertices before creating a new one.
     /// </summary>
     private void OnCreatePerformed()
     {
-        // Get the controller's current position
-        Vector3 newPoint = ControllerTransform.position;
+        Vector3 controllerPos = ControllerTransform.position;
+        Vector3 vertexToAdd = controllerPos;
+        int vertexIndex = -1;
 
-        // Instantiate a visual dot at the new point
+        // --- Vertex Snapping Logic ---
+        // Find the index of the closest existing vertex, if it's within snapDistance.
+        float closestDistSqr = snapDistance * snapDistance; // Use squared distance for performance
+        for (int i = 0; i < allVertices.Count; i++)
+        {
+            float distSqr = (allVertices[i] - controllerPos).sqrMagnitude;
+            if (distSqr < closestDistSqr)
+            {
+                closestDistSqr = distSqr;
+                vertexIndex = i;
+            }
+        }
+
+        // --- Determine Which Vertex to Use ---
+        if (vertexIndex != -1)
+        {
+            // A close vertex was found! Snap to it instead of creating a new one.
+            vertexToAdd = allVertices[vertexIndex];
+            Debug.Log($"Snapped to existing vertex at index {vertexIndex}");
+        }
+        else
+        {
+            // No vertex is close enough, so create a new one.
+            allVertices.Add(vertexToAdd);
+            vertexIndex = allVertices.Count - 1; // Its index is the last one in the list.
+            Debug.Log($"Created new vertex at index {vertexIndex}");
+        }
+
+        // Add the chosen vertex position to the temporary list for drawing lines.
+        currentTriangleVertices.Add(vertexToAdd);
+        // Add its index to the list for building the mesh triangle.
+        currentTriangleIndices.Add(vertexIndex);
+
+        // Instantiate a visual dot at the final vertex position (either new or snapped).
         if (DotPrefab != null)
         {
-            GameObject dot = Instantiate(DotPrefab, newPoint, Quaternion.identity);
+            GameObject dot = Instantiate(DotPrefab, vertexToAdd, Quaternion.identity);
             activeDots.Add(dot);
         }
 
-        // Add the new point to our temporary list for the current triangle
-        currentTriangleVertices.Add(newPoint);
-
-        // Update the state based on how many points we have for the current triangle
+        // Update the state based on how many points we have for the current triangle.
         UpdateCreationState();
-
         MxInkHandler.TriggerHapticClick();
     }
 
-    // NEW METHOD: Handles the Undo action
     /// <summary>
-    /// This method is called when the Undo action is performed.
-    /// It either removes the last placed point or the last completed triangle.
+    /// MODIFIED: The undo logic is now safer and correctly handles shared vertices.
     /// </summary>
     private void OnUndoPerformed()
     {
-        // Case 1: We are in the middle of creating a triangle. Undo the last point.
+        // Case 1: Undo the last point while creating a triangle.
         if (currentTriangleVertices.Count > 0)
         {
-            // Remove the last vertex added to the temporary list.
+            int lastIndex = currentTriangleIndices[currentTriangleIndices.Count - 1];
+
+            // Check if the vertex we're about to remove was a new one and isn't used by any other completed triangle.
+            bool isIndexUsedElsewhere = allTriangles.Contains(lastIndex);
+
+            // We can only safely remove a vertex if it was the last one added AND it's not part of another triangle.
+            if (!isIndexUsedElsewhere && lastIndex == allVertices.Count - 1)
+            {
+                allVertices.RemoveAt(lastIndex);
+                Debug.Log($"Removed newly created vertex at index {lastIndex}.");
+            }
+
+            // Remove the point from the temporary lists.
             currentTriangleVertices.RemoveAt(currentTriangleVertices.Count - 1);
+            currentTriangleIndices.RemoveAt(currentTriangleIndices.Count - 1);
 
             // Remove and destroy the corresponding visual dot.
             if (activeDots.Count > 0)
@@ -144,21 +179,18 @@ public class ModelBuilder : MonoBehaviour
                 Destroy(dotToUndo);
             }
 
-            // Update the visual state (e.g., the line renderer) to reflect the removal.
             UpdateCreationState();
             Debug.Log("Last point undone.");
         }
-        // Case 2: We are not creating a triangle. Undo the last completed triangle from the mesh.
-        else if (allVertices.Count > 0)
+        // Case 2: Undo the last completed triangle.
+        else if (allTriangles.Count > 0)
         {
             Debug.Log("Undoing last triangle.");
-            // Remove the last 3 vertices that formed the last triangle.
-            allVertices.RemoveRange(allVertices.Count - 3, 3);
 
-            // Remove the last 3 triangle indices.
+            // IMPORTANT: We can NOT safely remove vertices, because other triangles might still use them.
+            // We only remove the last 3 triangle indices, which effectively removes the last triangle.
             allTriangles.RemoveRange(allTriangles.Count - 3, 3);
 
-            // Update the mesh with the new (smaller) data lists.
             UpdateMesh();
         }
         else
@@ -168,34 +200,25 @@ public class ModelBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// A state machine to handle the creation process step-by-step.
+    /// A state machine to handle the creation process step-by-step. No changes needed here.
     /// </summary>
     private void UpdateCreationState()
     {
         switch (currentTriangleVertices.Count)
         {
-            // NEW CASE: Handles state after undoing the first point of a triangle.
             case 0:
-                // Ensure the line renderer is cleared.
                 lineRenderer.positionCount = 0;
                 break;
-
             case 1:
-                // First point placed.
                 Debug.Log("First point placed. Awaiting second point.");
-                // Ensure line renderer is cleared (important for when we undo from 2 points to 1).
                 lineRenderer.positionCount = 0;
                 break;
-
             case 2:
-                // Second point placed. Draw a line between the two points.
                 Debug.Log("Second point placed. Drawing line. Awaiting third point.");
                 lineRenderer.positionCount = 2;
                 lineRenderer.SetPositions(currentTriangleVertices.ToArray());
                 break;
-
             case 3:
-                // Third point placed. Create the triangle mesh.
                 Debug.Log("Third point placed. Creating triangle and resetting.");
                 AddTriangleToMesh();
                 ResetForNextTriangle();
@@ -204,62 +227,43 @@ public class ModelBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Adds the three vertices from m_CurrentTriangleVertices to the main mesh data.
+    /// MODIFIED: Adds the triangle to the mesh using the stored indices.
     /// </summary>
     private void AddTriangleToMesh()
     {
-        // The starting index for the new vertices will be the current total count
-        int baseIndex = allVertices.Count;
-
-        // Add the three new vertices to our master list
-        allVertices.AddRange(currentTriangleVertices);
-
-        // Define the new triangle using the indices of the vertices we just added.
-        allTriangles.Add(baseIndex);
-        allTriangles.Add(baseIndex + 1);
-        allTriangles.Add(baseIndex + 2);
-
-        // Update the actual Mesh object
-        UpdateMesh(); // MODIFIED: Call to the new helper method
+        // The vertices are already in the `allVertices` list.
+        // We just add the three indices from our temporary list to define the new triangle.
+        allTriangles.AddRange(currentTriangleIndices);
+        UpdateMesh();
     }
 
-    // NEW HELPER METHOD: Refactored from AddTriangleToMesh
     /// <summary>
-    /// Applies the current vertex and triangle lists to the generatedMesh object.
+    /// Applies the current vertex and triangle lists to the generatedMesh object. No changes needed here.
     /// </summary>
     private void UpdateMesh()
     {
-        generatedMesh.Clear(); // Clear old data
-
+        generatedMesh.Clear();
         generatedMesh.SetVertices(allVertices);
-        generatedMesh.SetIndices(allTriangles, MeshTopology.Triangles, 0);
-
-        
-        // Recalculate normals for correct lighting and bounds for culling
+        generatedMesh.SetTriangles(allTriangles, 0); // Use SetTriangles instead of SetIndices
         generatedMesh.RecalculateNormals();
         generatedMesh.RecalculateBounds();
-
-        generatedMesh.MarkModified();
-
-        TargetMeshFilter.sharedMesh = generatedMesh;
     }
 
     /// <summary>
-    /// Cleans up the temporary dots and lines to prepare for the next triangle.
+    /// MODIFIED: Cleans up temporary lists to prepare for the next triangle.
     /// </summary>
     private void ResetForNextTriangle()
     {
-        // Clear the list of vertices for the current triangle
         currentTriangleVertices.Clear();
+        // NEW: Also clear the temporary index list.
+        currentTriangleIndices.Clear();
 
-        // Destroy the temporary dot GameObjects
         foreach (GameObject dot in activeDots)
         {
             Destroy(dot);
         }
         activeDots.Clear();
 
-        // Hide the line renderer
         lineRenderer.positionCount = 0;
     }
 }

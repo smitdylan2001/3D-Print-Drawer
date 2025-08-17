@@ -2133,6 +2133,7 @@ MonoBehaviour:
   ControllerTransform: {fileID: 430597941}
   DotPrefab: {fileID: 2905003861693566470, guid: b8144d5dfae2ff24fa51bafc410af956, type: 3}
   TargetMeshFilter: {fileID: 542246444}
+  snapDistance: 0.05
 --- !u!4 &407608606
 Transform:
   m_ObjectHideFlags: 0
@@ -2184,7 +2185,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 0
+    m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
