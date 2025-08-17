@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "co.parabox.stl": {
+      "version": "https://github.com/karl-/pb_Stl.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "b6b2a6815f81ea2c61ae9f22d8e0635d363b5212"
+    },
     "com.meta.xr.mrutilitykit": {
       "version": "77.0.0",
       "depth": 1,

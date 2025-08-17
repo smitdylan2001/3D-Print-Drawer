@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "co.parabox.stl": "https://github.com/karl-/pb_Stl.git",
     "com.meta.xr.sdk.all": "77.0.0",
     "com.unity.ai.navigation": "2.0.8",
     "com.unity.ide.visualstudio": "2.0.23",
