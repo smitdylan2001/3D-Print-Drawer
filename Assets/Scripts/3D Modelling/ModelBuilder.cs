@@ -92,7 +92,7 @@ public class ModelBuilder : MonoBehaviour
     /// A state machine to handle the creation process step-by-step.
     /// </summary>
     private void UpdateCreationState()
-    {
+    {   
         switch (m_CurrentTriangleVertices.Count)
         {
             case 1:
