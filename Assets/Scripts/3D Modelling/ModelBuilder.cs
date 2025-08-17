@@ -1,3 +1,4 @@
+using Parabox.Stl;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -41,8 +42,11 @@ public class ModelBuilder : MonoBehaviour
 
     private bool HasPressedMain, HasPressedSecond;
 
+    private STLExporter exporter;
+
     private void Awake()
     {
+        exporter = GetComponent<STLExporter>();
         // Get the LineRenderer component
         lineRenderer = GetComponent<LineRenderer>();
         // Configure the LineRenderer
@@ -152,6 +156,9 @@ public class ModelBuilder : MonoBehaviour
     /// </summary>
     private void OnUndoPerformed()
     {
+        exporter.ExportMeshToSTL(TargetMeshFilter);
+
+        return;
         // Case 1: Undo the last point while creating a triangle.
         if (currentTriangleVertices.Count > 0)
         {
