@@ -9,9 +9,6 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8922a6ca86889d84f8371a29d37b6dc8, type: 3}
-  m_Name: InputActions
+  m_Script: {fileID: 11500000, guid: 20553fac56ec59645857c0732b787431, type: 3}
+  m_Name: OVRBuildConfig
   m_EditorClassIdentifier: 
-  InputActionDefinitions: []
-  InputActionSets:
-  - {fileID: 11400000, guid: 07d8104174d1046e3aa835ff86c10080, type: 2}
