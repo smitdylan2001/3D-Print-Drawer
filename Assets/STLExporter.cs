@@ -57,11 +57,13 @@ public class STLExporter : MonoBehaviour
         var meshes = new UnityEngine.Mesh[models.Length];
         for (int i = 0; i < models.Length; i++)
         {
-            meshes[i] = models[i].GetComponent<MeshFilter>().sharedMesh;
+            if(models[i].GetComponent<MeshFilter>()) meshes[i] = models[i].GetComponent<MeshFilter>().sharedMesh;
         }
         // Convert Unity mesh to STL format
         string filePath = System.IO.Path.Combine(Application.persistentDataPath, filename + ".stl");
         Exporter.Export(filePath, models, FileType.Binary);
+
+        Debug.Log(filePath );
     }
 
     // Coroutine version for better performance
