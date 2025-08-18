@@ -1,7 +1,5 @@
-using NUnit.Framework.Internal;
 using Parabox.Stl;
 using System.Collections;
-using System.Linq;
 using UnityEngine;
 
 public class STLExporter : MonoBehaviour
@@ -13,7 +11,6 @@ public class STLExporter : MonoBehaviour
     {
         ExportMultiModels(exports);
     }
-
 
     public void ExportMeshToSTL(MeshFilter mesh)
     {
@@ -29,7 +26,7 @@ public class STLExporter : MonoBehaviour
         // Convert Unity mesh to STL format
         string stlString = Exporter.WriteString(mesh);
 
-        try 
+        try
         {
             System.IO.File.WriteAllText(filePath, stlString);
             Debug.Log($"STL exported successfully to: {filePath}");
@@ -48,6 +45,13 @@ public class STLExporter : MonoBehaviour
         {
             ExportMeshToSTL(meshFilter);
         }
+    }
+
+    public void ExportMultiModels()
+    {
+        var objects = GameObject.FindGameObjectsWithTag("Print");
+
+        ExportMultiModels(objects);
     }
 
     public void ExportMultiModels(GameObject[] models)

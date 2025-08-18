@@ -47,6 +47,11 @@ public class SnapGridRotate : MonoBehaviour
         }
     }
 
+    public void Rotate()
+    {
+        transform.Rotate(Vector3.up, .5f);
+    }
+
     /// <summary>
     /// Creates and configures a child GameObject with a LineRenderer to draw an axis.
     /// </summary>

@@ -206,17 +206,6 @@ public class ModelBuilder : MonoBehaviour
     // --- MODIFIED: Simplified and more robust Undo logic ---
     private void OnUndoPerformed()
     {
-        // This is your custom export logic, you can keep it or remove it.
-        var printables = GameObject.FindGameObjectsWithTag("Print");
-        if(GetComponent<STLScaler>() && TargetMeshFilter) GetComponent<STLScaler>().ScaleSTLMesh(TargetMeshFilter);
-        if (printables.Length > 0)
-        {
-            exporter.ExportMultiModels(printables);
-            return;
-        }
-
-        return;
-
         // If we are in the middle of creating a triangle, undo the last point.
         if (currentTrianglePoints.Count > 0)
         {
