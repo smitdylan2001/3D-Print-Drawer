@@ -44,7 +44,7 @@ public class VrStylusHandler : StylusHandler
         string MX_Ink_Pose = _stylus.isOnRightHand ? MX_Ink_Pose_Right : MX_Ink_Pose_Left;
 
         _mxInk_model.SetActive(_stylus.isActive);
-        //_right_touch_controller.SetActive(!_stylus.isOnRightHand || !_stylus.isActive);
+        _right_touch_controller.SetActive(!_stylus.isOnRightHand || !_stylus.isActive);
         //_left_touch_controller.SetActive(_stylus.isOnRightHand || !_stylus.isActive);
 
         if (OVRPlugin.GetActionStatePose("aim_right", out OVRPlugin.Posef handPose))
