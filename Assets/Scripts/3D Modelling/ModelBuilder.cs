@@ -1,44 +1,56 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
+// --- ADDED: Required namespaces for the new Input System ---
+using UnityEngine.InputSystem;
+// --- ADDED: Required namespaces for Spatial Anchors and async operations ---
+using Meta.XR.MRUtilityKit;
+using System.Threading.Tasks;
 
 public class ModelBuilder : MonoBehaviour
 {
+    [Header("Object References")]
     [SerializeField] private VrStylusHandler MxInkHandler;
     [SerializeField] private Transform ControllerTransform;
     [SerializeField] private GameObject DotPrefab;
     [SerializeField] private MeshFilter TargetMeshFilter;
-    [SerializeField] private float snapDistance = 0.05f;
 
+    [Header("Snapping Settings")]
+    [SerializeField] private float snapDistance = 0.05f;
     public bool CanSnap = true;
     [SerializeField] private float axisSnapThreshold = 0.1f;
+
+    // --- ADDED: Input Action fields to be assigned in the Inspector ---
+    [Header("Input Actions")]
+    [SerializeField] private InputAction placeVertexAction; // For the "front" button
+    [SerializeField] private InputAction undoAction; // For the "back" button
 
     private Mesh generatedMesh;
     private LineRenderer lineRenderer;
 
-    // --- MODIFIED: Renamed for clarity. These lists hold the final mesh data.
     private readonly List<Vector3> meshVertices = new List<Vector3>();
     private readonly List<int> meshTriangles = new List<int>();
 
-    // --- MODIFIED: This list now only stores the Vector3 positions for the triangle currently being built.
     private readonly List<Vector3> currentTrianglePoints = new List<Vector3>();
     private readonly List<GameObject> activeDots = new List<GameObject>();
 
     private bool isPlacingVertex = false;
     private GameObject previewDot;
 
-    private bool HasPressedSecond;
+    // --- REMOVED: No longer needed with the event-based input system ---
+    // private bool HasPressedSecond; 
+
     private STLExporter exporter;
+
+    // --- ADDED: A reference to the created spatial anchor ---
+    private OVRSpatialAnchor _spatialAnchor;
 
     [ContextMenu("ExportTest")]
     public void Test()
     {
-        // This is your custom export logic, you can keep it or remove it.
         var printables = GameObject.FindGameObjectsWithTag("Print");
-        //GetComponent<STLScaler>().ScaleSTLMesh(TargetMeshFilter);
         if (printables.Length > 0)
         {
             exporter = GetComponent<STLExporter>();
-
             exporter.ExportMultiModels(printables);
             return;
         }
@@ -64,47 +76,71 @@ public class ModelBuilder : MonoBehaviour
         generatedMesh.name = "GeneratedCustomMesh";
         TargetMeshFilter.mesh = generatedMesh;
         generatedMesh.MarkDynamic();
+
+
     }
 
+    // --- ADDED: OnEnable and OnDisable to handle input action subscriptions ---
+    private void OnEnable()
+    {
+        // Subscribe to the "performed" (press) and "canceled" (release) events
+        placeVertexAction.performed += OnPlaceVertexStarted;
+        placeVertexAction.canceled += OnPlaceVertexEnded;
+        undoAction.performed += OnUndoAction;
+
+        // Enable the actions
+        placeVertexAction.Enable();
+        undoAction.Enable();
+    }
+
+    private void OnDisable()
+    {
+        // Unsubscribe to prevent memory leaks
+        placeVertexAction.performed -= OnPlaceVertexStarted;
+        placeVertexAction.canceled -= OnPlaceVertexEnded;
+        undoAction.performed -= OnUndoAction;
+
+        // Disable the actions
+        placeVertexAction.Disable();
+        undoAction.Disable();
+    }
+
+    // --- MODIFIED: Update now only handles the visual preview while placing ---
     private void Update()
     {
-        OVRPlugin.GetActionStateBoolean("front", out bool stylus_front_button);
-        OVRPlugin.GetActionStateBoolean("back", out bool stylus_back_button);
-
-        if (stylus_front_button)
+        // If we are in the middle of placing a vertex, update the preview line/dot
+        if (isPlacingVertex)
         {
-            if (!isPlacingVertex)
-            {
-                isPlacingVertex = true;
-                if (DotPrefab != null)
-                {
-                    previewDot = Instantiate(DotPrefab, ControllerTransform.position, Quaternion.identity);
-                }
-            }
-
             UpdatePlacementPreview();
-        }
-        else
-        {
-            if (isPlacingVertex)
-            {
-                isPlacingVertex = false;
-                PlaceVertex();
-            }
-        }
-
-        if (stylus_back_button)
-        {
-            if (!HasPressedSecond) OnUndoPerformed();
-            HasPressedSecond = true;
-        }
-        else
-        {
-            HasPressedSecond = false;
         }
     }
 
-    // --- NO CHANGES IN THIS METHOD ---
+    // --- ADDED: Handler for when the place vertex action starts (button pressed) ---
+    private void OnPlaceVertexStarted(InputAction.CallbackContext context)
+    {
+        isPlacingVertex = true;
+        if (DotPrefab != null)
+        {
+            previewDot = Instantiate(DotPrefab, ControllerTransform.position, Quaternion.identity);
+        }
+    }
+
+    // --- ADDED: Handler for when the place vertex action ends (button released) ---
+    private void OnPlaceVertexEnded(InputAction.CallbackContext context)
+    {
+        if (isPlacingVertex)
+        {
+            isPlacingVertex = false;
+            PlaceVertex();
+        }
+    }
+
+    // --- ADDED: Handler for when the undo action is performed ---
+    private void OnUndoAction(InputAction.CallbackContext context)
+    {
+        OnUndoPerformed();
+    }
+
     private Vector3 GetAxisSnappedPosition(Vector3 currentPos)
     {
         if (!CanSnap || currentTrianglePoints.Count == 0)
@@ -167,30 +203,32 @@ public class ModelBuilder : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Places a vertex point. Snapping aligns the position, but the vertex data itself will be new.
-    /// </summary>
     private void PlaceVertex()
     {
         Vector3 positionAfterAxisSnap = GetAxisSnappedPosition(ControllerTransform.position);
         Vector3 finalVertexPosition = positionAfterAxisSnap;
 
-        // --- MODIFIED: Vertex Snapping Logic ---
-        // This still snaps the *position*, but we no longer care about reusing an index.
         float closestDistSqr = snapDistance * snapDistance;
-        // --- NOTE: Now searching meshVertices instead of allVertices
+
         for (int i = 0; i < meshVertices.Count; i++)
         {
             float distSqr = (meshVertices[i] - positionAfterAxisSnap).sqrMagnitude;
             if (distSqr < closestDistSqr)
             {
                 closestDistSqr = distSqr;
-                finalVertexPosition = meshVertices[i]; // Snap to the exact position of the existing vertex
+                finalVertexPosition = meshVertices[i];
             }
         }
 
-        // Add the final position to the list for the current triangle.
         currentTrianglePoints.Add(finalVertexPosition);
+
+        // --- MODIFIED: Check if this is the very first vertex being placed ---
+        // If the main mesh has no vertices yet, and we've just added the first
+        // point to our current triangle, create the anchor.
+        if (meshVertices.Count == 0 && currentTrianglePoints.Count == 1)
+        {
+            CreateSpatialAnchor(finalVertexPosition);
+        }
 
         if (previewDot != null)
         {
@@ -203,10 +241,54 @@ public class ModelBuilder : MonoBehaviour
         MxInkHandler.TriggerHapticClick();
     }
 
-    // --- MODIFIED: Simplified and more robust Undo logic ---
+    // --- ADDED: New method to create and save the spatial anchor ---
+    private async void CreateSpatialAnchor(Vector3 position)
+    {
+        var result = await OVRSpatialAnchor.EraseAnchorsAsync(FindObjectsByType<OVRSpatialAnchor>(FindObjectsSortMode.None), null);
+
+        if (result.Success)
+        {
+            Debug.Log($"Successfully erased anchors.");
+        }
+        else
+        {
+            Debug.LogError($"Failed to erase anchors with result {result.Status}");
+        }
+
+        // Prevent creating more than one anchor
+        if (_spatialAnchor != null) return;
+
+        // 1. Create a new GameObject to host the anchor component
+        var anchorGo = new GameObject("Model_Root_SpatialAnchor");
+        anchorGo.transform.position = position;
+
+        // 2. Add the OVRSpatialAnchor component
+        _spatialAnchor = anchorGo.AddComponent<OVRSpatialAnchor>();
+
+        // 3. Wait until the component is created and localized
+        while (!_spatialAnchor.Created)
+        {
+            await Task.Yield();
+        }
+        Debug.Log($"Created anchor {_spatialAnchor.Uuid}");
+        TargetMeshFilter.transform.SetParent(_spatialAnchor.transform, worldPositionStays: true);
+        return;
+        // 4. Asynchronously save the anchor to device storage
+        var saveResult = await _spatialAnchor.SaveAnchorAsync();
+
+        if (saveResult)
+        {
+            Debug.Log($"✅ Successfully created and saved Spatial Anchor with UUID: {_spatialAnchor.Uuid}");
+            // Optional: Parent the model to the anchor so their positions are linked
+        }
+        else
+        {
+            Debug.LogError("❌ Failed to save the Spatial Anchor.");
+        }
+    }
+
     private void OnUndoPerformed()
     {
-        // If we are in the middle of creating a triangle, undo the last point.
         if (currentTrianglePoints.Count > 0)
         {
             currentTrianglePoints.RemoveAt(currentTrianglePoints.Count - 1);
@@ -220,11 +302,9 @@ public class ModelBuilder : MonoBehaviour
             UpdateCreationState();
             Debug.Log("Last point undone.");
         }
-        // Otherwise, if there are triangles in the mesh, undo the last one.
         else if (meshTriangles.Count > 0)
         {
             Debug.Log("Undoing last triangle.");
-            // Remove the last 3 vertex positions and 3 triangle indices.
             meshVertices.RemoveRange(meshVertices.Count - 3, 3);
             meshTriangles.RemoveRange(meshTriangles.Count - 3, 3);
             UpdateMesh();
@@ -260,36 +340,22 @@ public class ModelBuilder : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Adds the three collected points to the mesh as a new, independent triangle.
-    /// </summary>
     private void AddTriangleToMesh()
     {
-        // --- CORE LOGIC CHANGE ---
-        // 1. Get the index where the new vertices will start.
         int baseIndex = meshVertices.Count;
-
-        // 2. Add the three new vertex positions. They are now part of the mesh data.
         meshVertices.AddRange(currentTrianglePoints);
-
-        // 3. Add the indices for the new triangle, pointing to the vertices we just added.
         meshTriangles.Add(baseIndex);
         meshTriangles.Add(baseIndex + 1);
         meshTriangles.Add(baseIndex + 2);
-
         UpdateMesh();
     }
 
-    /// <summary>
-    /// Clears and applies all vertex and triangle data to the actual mesh component.
-    /// </summary>
     private void UpdateMesh()
     {
         generatedMesh.Clear();
         generatedMesh.SetVertices(meshVertices);
         generatedMesh.SetTriangles(meshTriangles, 0);
 
-        // --- IMPORTANT: This must be called to calculate lighting data.
         generatedMesh.RecalculateNormals();
         generatedMesh.RecalculateBounds();
     }
