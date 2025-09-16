@@ -370,4 +370,43 @@ public class ModelBuilder : MonoBehaviour
         activeDots.Clear();
         lineRenderer.positionCount = 0;
     }
+
+    /// <summary>
+    /// Toggles the snap distance between 0 (no snapping) and 0.05f (default snapping)
+    /// </summary>
+    public void ToggleSnapDistance()
+    {
+        axisSnapThreshold = axisSnapThreshold > 0 ? 0f : 0.01f;
+        Debug.Log($"Snap distance changed to: {axisSnapThreshold}");
+    }
+
+    // Alternative: More explicit method names
+    /// <summary>
+    /// Disables vertex snapping by setting snap distance to 0
+    /// </summary>
+    public void DisableSnapping()
+    {
+        axisSnapThreshold = 0f;
+        Debug.Log("Axis snapping disabled");
+    }
+
+    /// <summary>
+    /// Enables vertex snapping by setting snap distance to 0.05f
+    /// </summary>
+    public void EnableSnapping()
+    {
+        axisSnapThreshold = 0.01f;
+        Debug.Log("Axis snapping enabled");
+    }
+
+    // Alternative: Method with parameter to set specific value
+    /// <summary>
+    /// Sets the snap distance to a specific value
+    /// </summary>
+    /// <param name="distance">The new snap distance (0 = no snapping)</param>
+    public void SetSnapDistance(float distance)
+    {
+        axisSnapThreshold = Mathf.Max(0f, distance); // Ensure non-negative
+        Debug.Log($"Axis snap distance set to: {snapDistance}");
+    }
 }
